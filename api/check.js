@@ -1,13 +1,27 @@
-export default function handler(req, res) {
-  const key = req.query.key;
+export default async function handler(req, res) {
+  const { key, device } = req.query;
 
-  const VALID_KEYS = ["12345", "ABCDE", "XYZ789"];
-if (VALID_KEYS.includes(key)) {
-    res.status(200).json({status:"ok", message:"Valid key"});
-} else {
-    res.status(200).json({status:"invalid", message:"Invalid key"});
+  // kunwari DB
+  const keysDB = {
+    "ABC123": { device: null },
+    "XYZ999": { device: "a1b2c3" }
+  };
+
+  if (!keysDB[key]) {
+    return res.json({ status: "invalid" });
+  }
+
+  // first time use → bind device
+  if (!keysDB[key].device) {
+    keysDB[key].device = device;
+    return res.json({ status: "ok", bound: true });
+  }
+
+  // already bound → check device
+  if (keysDB[key].device === device) {
+    return res.json({ status: "ok", bound: true });
+  }
+
+  // mismatch
+  return res.json({ status: "device_mismatch" });
 }
-
-}
-
-
