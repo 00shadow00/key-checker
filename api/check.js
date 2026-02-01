@@ -23,5 +23,5 @@ export default async function handler(req, res) {
   }
 
   // mismatch
-  return res.json({ status: "device_mismatch" + device });
+  return res.json({ status: "device_mismatch" });
 }
