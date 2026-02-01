@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   // kunwari DB
   const keysDB = {
     "ABC123": { device: null },
-    "XYZ999": { device: "a1b2c3" }
+    "venom": { device: "18db7457294f554f" }
   };
 
   if (!keysDB[key]) {
