@@ -1,27 +1,33 @@
 export default async function handler(req, res) {
   const { key, device } = req.query;
 
-  // kunwari DB
+  // "DB"
   const keysDB = {
     "ABC123": { device: null },
     "venom": { device: "18db7457294f554f" }
   };
 
+  // If no key is provided, just return all keys
+  if (!key) {
+    return res.status(200).json(keysDB);
+  }
+
+  // Existing logic for single key check/bind
   if (!keysDB[key]) {
     return res.json({ status: "invalid" });
   }
 
-  // first time use → bind device
+  // First-time use → bind device
   if (!keysDB[key].device) {
     keysDB[key].device = device;
     return res.json({ status: "ok", bound: true });
   }
 
-  // already bound → check device
+  // Already bound → check device
   if (keysDB[key].device === device) {
     return res.json({ status: "ok", bound: true });
   }
 
-  // mismatch
+  // Device mismatch
   return res.json({ status: "device_mismatch" });
 }
