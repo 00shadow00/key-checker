@@ -5,26 +5,39 @@ let keysDB = {
 };
 
 export default async function handler(req, res) {
-  const { method } = req;  // HTTP method (GET, POST, PUT, DELETE)
-  const { key, device } = req.query;  // Extract `key` and `device` from query parameters
-  
-  // Handle different HTTP methods
+  const { method } = req;      // HTTP method
+  const { key, device } = req.query;  // Query params
+
   switch (method) {
-    // **GET**: Retrieve the status of a specific key or all keys
+
+    // ===================== GET =====================
     case 'GET':
+      // Return all keys
       if (!key) {
-        return res.status(200).json(keysDB);  // Return all keys if no specific key is provided
+        return res.status(200).json(keysDB);
       }
 
+      // Key not found
       if (!keysDB[key]) {
-        return res.json({ status: "invalid" });  // Key doesn't exist
+        return res.json({ status: "invalid" });
       }
 
-      // Key exists, return its device status
-      const deviceStatus = keysDB[key].device ? keysDB[key].device : "Not bound";
-      return res.json({ status: "ok", key, device: deviceStatus });
+      const savedDevice = keysDB[key].device;
 
-    // **POST**: Create a new key (optionally bind it to a device)
+      // 🔒 ADDED: device mismatch check (minimal change)
+      if (savedDevice && device && savedDevice !== device) {
+        return res.json({ status: "invalid" });
+      }
+
+      // Original behavior
+      const deviceStatus = savedDevice ? savedDevice : "Not bound";
+      return res.json({
+        status: "ok",
+        key,
+        device: deviceStatus
+      });
+
+    // ===================== POST =====================
     case 'POST':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -34,11 +47,15 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key already exists" });
       }
 
-      // Create new key and bind it to a device if provided
       keysDB[key] = { device: device || null };
-      return res.json({ status: "ok", message: "Key created", key, device: keysDB[key].device });
+      return res.json({
+        status: "ok",
+        message: "Key created",
+        key,
+        device: keysDB[key].device
+      });
 
-    // **PUT**: Update the device of an existing key
+    // ===================== PUT =====================
     case 'PUT':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -48,11 +65,15 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      // Update the device (bind the key to a new device)
       keysDB[key].device = device;
-      return res.json({ status: "ok", message: "Device updated", key, device });
+      return res.json({
+        status: "ok",
+        message: "Device updated",
+        key,
+        device
+      });
 
-    // **DELETE**: Delete a key or unbind its device
+    // ===================== DELETE =====================
     case 'DELETE':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -62,18 +83,27 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      // If device is provided, unbind it
       if (device) {
         keysDB[key].device = null;
-        return res.json({ status: "ok", message: "Device unbound", key });
+        return res.json({
+          status: "ok",
+          message: "Device unbound",
+          key
+        });
       }
 
-      // Delete the key from the database
       delete keysDB[key];
-      return res.json({ status: "ok", message: "Key deleted", key });
+      return res.json({
+        status: "ok",
+        message: "Key deleted",
+        key
+      });
 
-    // Default case for unsupported methods
+    // ===================== DEFAULT =====================
     default:
-      return res.status(405).json({ status: "error", message: "Method Not Allowed" });
+      return res.status(405).json({
+        status: "error",
+        message: "Method Not Allowed"
+      });
   }
 }
