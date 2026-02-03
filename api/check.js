@@ -1,49 +1,30 @@
-
-
 // Simulated Database (Temporary in-memory store)
 let keysDB = {
-  "ABC123": { device: null, expiresAt: null },
-  "venom": {
-    device: "18db7457294f554f",
-    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 days
-  }
+  "ABC123": { device: null },
+  "venom": { device: "18db7457294f554f" }
 };
 
-// Helper: check if expired
-function isExpired(keyData) {
-  return keyData.expiresAt && Date.now() > keyData.expiresAt;
-}
-
 export default async function handler(req, res) {
-  const { method } = req;
-  const { key, device, days } = req.query;
-
+  const { method } = req;  // HTTP method (GET, POST, PUT, DELETE)
+  const { key, device } = req.query;  // Extract `key` and `device` from query parameters
+  
+  // Handle different HTTP methods
   switch (method) {
-
-    // ================= GET =================
+    // **GET**: Retrieve the status of a specific key or all keys
     case 'GET':
       if (!key) {
-        return res.status(200).json(keysDB);
+        return res.status(200).json(keysDB);  // Return all keys if no specific key is provided
       }
 
       if (!keysDB[key]) {
-        return res.json({ status: "invalid" });
+        return res.json({ status: "invalid" });  // Key doesn't exist
       }
 
-      // Expiry check
-      if (isExpired(keysDB[key])) {
-        delete keysDB[key]; // auto cleanup
-        return res.json({ status: "expired" });
-      }
+      // Key exists, return its device status
+      const deviceStatus = keysDB[key].device ? keysDB[key].device : "Not bound";
+      return res.json({ status: "ok", key, device: deviceStatus });
 
-      return res.json({
-        status: "ok",
-        key,
-        device: keysDB[key].device || "Not bound",
-        expiresAt: keysDB[key].expiresAt
-      });
-
-    // ================= POST =================
+    // **POST**: Create a new key (optionally bind it to a device)
     case 'POST':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -53,22 +34,11 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key already exists" });
       }
 
-      keysDB[key] = {
-        device: device || null,
-        expiresAt: days
-          ? Date.now() + Number(days) * 24 * 60 * 60 * 1000
-          : null
-      };
+      // Create new key and bind it to a device if provided
+      keysDB[key] = { device: device || null };
+      return res.json({ status: "ok", message: "Key created", key, device: keysDB[key].device });
 
-      return res.json({
-        status: "ok",
-        message: "Key created",
-        key,
-        device: keysDB[key].device,
-        expiresAt: keysDB[key].expiresAt
-      });
-
-    // ================= PUT =================
+    // **PUT**: Update the device of an existing key
     case 'PUT':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -78,20 +48,11 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      if (isExpired(keysDB[key])) {
-        delete keysDB[key];
-        return res.json({ status: "expired" });
-      }
-
+      // Update the device (bind the key to a new device)
       keysDB[key].device = device;
-      return res.json({
-        status: "ok",
-        message: "Device updated",
-        key,
-        device
-      });
+      return res.json({ status: "ok", message: "Device updated", key, device });
 
-    // ================= DELETE =================
+    // **DELETE**: Delete a key or unbind its device
     case 'DELETE':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -101,27 +62,18 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key does not exist" });
       }
 
+      // If device is provided, unbind it
       if (device) {
         keysDB[key].device = null;
-        return res.json({
-          status: "ok",
-          message: "Device unbound",
-          key
-        });
+        return res.json({ status: "ok", message: "Device unbound", key });
       }
 
+      // Delete the key from the database
       delete keysDB[key];
-      return res.json({
-        status: "ok",
-        message: "Key deleted",
-        key
-      });
+      return res.json({ status: "ok", message: "Key deleted", key });
 
-    // ================= DEFAULT =================
+    // Default case for unsupported methods
     default:
-      return res.status(405).json({
-        status: "error",
-        message: "Method Not Allowed"
-      });
+      return res.status(405).json({ status: "error", message: "Method Not Allowed" });
   }
 }
