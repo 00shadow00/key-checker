@@ -81,12 +81,24 @@ export default async function handler(req, res) {
         return res.json({ status: "expired" });
       }
 
-      keysDB[key].device = device;
+      // Update device if provided
+      if (device !== undefined) {
+        keysDB[key].device = device;
+      }
+
+      // Update expiry if provided
+      if (days !== undefined) {
+        keysDB[key].expiresAt = days
+          ? Date.now() + Number(days) * 24 * 60 * 60 * 1000
+          : null;
+      }
+
       return res.json({
         status: "ok",
-        message: "Device updated",
+        message: "Key updated",
         key,
-        device
+        device: keysDB[key].device,
+        expiresAt: keysDB[key].expiresAt
       });
 
     // ================= DELETE =================
