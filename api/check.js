@@ -1,49 +1,41 @@
-// ===================== Simulated Database (In-Memory) =====================
+// Simulated Database (Temporary in-memory store)
 let keysDB = {
-  "ABC123": {
-    device: null,
-    expiry: null
-  },
-  "venom": {
-    device: "18db7457294f554f",
-    expiry: null
-  },
+  "ABC123": { device: null },
+  "venom": { device: "18db7457294f554f" },
   "abd": {
     device: "18db7457294f554f",
-    expiry: "2027-01-01" // YYYY-MM-DD
+    expiry: "2026-01-01" // YYYY-MM-DD
   }
 };
 
-// ===================== API Handler =====================
 export default async function handler(req, res) {
   const { method } = req;
-
-  // GET uses query, others can use body
-  const { key, device } =
-    method === "GET" ? req.query : req.body || {};
+  const { key, device } = req.query;
 
   switch (method) {
 
     // ===================== GET =====================
-    case "GET": {
-      // Return all keys (debug)
+    case 'GET':
+
+      // return all keys
       if (!key) {
         return res.status(200).json(keysDB);
       }
 
-      // Key not found
+      // key not found
       if (!keysDB[key]) {
         return res.json({ status: "invalid" });
       }
 
-      const { device: savedDevice, expiry } = keysDB[key];
+      const savedDevice = keysDB[key].device;
+      const expiry = keysDB[key].expiry;
 
-      // 🔒 Device check
-      if (savedDevice && (!device || savedDevice !== device)) {
+      // 🔒 SAME device check logic (unchanged)
+      if (savedDevice && device && savedDevice !== device) {
         return res.json({ status: "invalid" });
       }
 
-      // ⏰ Expiry check
+      // ⏰ ADDED: expiry check (SERVER DATE)
       if (expiry) {
         const now = new Date();
         const expDate = new Date(expiry);
@@ -56,28 +48,22 @@ export default async function handler(req, res) {
         }
       }
 
+      // SAME response
+      const deviceStatus = savedDevice ? savedDevice : "Not bound";
       return res.json({
         status: "ok",
         key,
-        device: savedDevice || "Not bound",
-        expiry: expiry || "none"
+        device: deviceStatus
       });
-    }
 
     // ===================== POST =====================
-    case "POST": {
+    case 'POST':
       if (!key) {
-        return res.json({
-          status: "error",
-          message: "Key is required"
-        });
+        return res.json({ status: "error", message: "Key is required" });
       }
 
       if (keysDB[key]) {
-        return res.json({
-          status: "error",
-          message: "Key already exists"
-        });
+        return res.json({ status: "error", message: "Key already exists" });
       }
 
       keysDB[key] = {
@@ -91,53 +77,35 @@ export default async function handler(req, res) {
         key,
         device: keysDB[key].device
       });
-    }
 
     // ===================== PUT =====================
-    case "PUT": {
+    case 'PUT':
       if (!key) {
-        return res.json({
-          status: "error",
-          message: "Key is required"
-        });
+        return res.json({ status: "error", message: "Key is required" });
       }
 
       if (!keysDB[key]) {
-        return res.json({
-          status: "error",
-          message: "Key does not exist"
-        });
+        return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      if (device !== undefined) {
-        keysDB[key].device = device;
-      }
-
+      keysDB[key].device = device;
       return res.json({
         status: "ok",
         message: "Device updated",
         key,
-        device: keysDB[key].device
+        device
       });
-    }
 
     // ===================== DELETE =====================
-    case "DELETE": {
+    case 'DELETE':
       if (!key) {
-        return res.json({
-          status: "error",
-          message: "Key is required"
-        });
+        return res.json({ status: "error", message: "Key is required" });
       }
 
       if (!keysDB[key]) {
-        return res.json({
-          status: "error",
-          message: "Key does not exist"
-        });
+        return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      // Unbind device only
       if (device) {
         keysDB[key].device = null;
         return res.json({
@@ -147,14 +115,12 @@ export default async function handler(req, res) {
         });
       }
 
-      // Delete key
       delete keysDB[key];
       return res.json({
         status: "ok",
         message: "Key deleted",
         key
       });
-    }
 
     // ===================== DEFAULT =====================
     default:
