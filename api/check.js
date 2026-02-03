@@ -1,56 +1,51 @@
-// Simulated Database (Temporary in-memory store)
+// Temporary in-memory store
 let keysDB = {
-  "ABC123": { device: null },
-  "venom": { device: "18db7457294f554f" },
-  "aj": {device: "18db7457294f554f" }
+  "ABC123": { device: null, expiresAt: null },
+  "venom": { device: "18db7457294f554f", expiresAt: Date.now() + 3*24*3600*1000 },
+  "aj": { device: "18db7457294f554f", expiresAt: Date.now() + 3*24*3600*1000 }
 };
 
 export default async function handler(req, res) {
   const { method } = req;
-  const { key, device } = req.query;
+  const { key, device, days } = req.query;
 
   // --- COMMON VALIDATION ---
-  if (!key) {
-    return res.status(400).json({ status: "error", message: "Key is required" });
-  }
+  if (!key) return res.status(400).json({ status: "error", message: "Key is required" });
 
-  if (!keysDB[key]) {
-    return res.json({ status: "invalid", message: "Key does not exist" });
-  }
+  // Helper to calculate expiresAt
+  const daysToMillis = (d) => (parseInt(d) || 0) * 24 * 3600 * 1000;
 
   // --- DEVICE CHECK ---
-  if (keysDB[key].device) {
+  if (keysDB[key] && keysDB[key].device) {
     if (!device || keysDB[key].device !== device) {
-      return res.json({
-        status: "invalid_device",
-        message: "Device does not match the key"
-      });
+      return res.json({ status: "invalid_device", message: "Device does not match the key" });
     }
   }
 
-  // --- METHOD HANDLING ---
   switch (method) {
-
-    // GET: Return key info
+    // GET: Return all keys info
     case 'GET':
-      return res.json({
-        status: "ok",
-        key,
-        device: keysDB[key].device || "Not bound"
-      });
-
-    // POST: Create a new key (only if key doesn't exist)
-    case 'POST':
-      if (keysDB[key]) {
-        return res.json({ status: "error", message: "Key already exists" });
+      const result = {};
+      for (const k in keysDB) {
+        result[k] = {
+          device: keysDB[k].device || "Not bound",
+          expiresAt: keysDB[k].expiresAt || null
+        };
       }
-      keysDB[key] = { device: device || null };
+      return res.json(result);
+
+    // POST: Create new key
+    case 'POST':
+      if (keysDB[key]) return res.json({ status: "error", message: "Key already exists" });
+      keysDB[key] = { device: device || null, expiresAt: days ? Date.now() + daysToMillis(days) : null };
       return res.json({ status: "ok", message: "Key created", key, device: keysDB[key].device });
 
-    // PUT: Bind a device to an unbound key
+    // PUT: Bind device to key
     case 'PUT':
+      if (!keysDB[key]) return res.json({ status: "invalid", message: "Key does not exist" });
       if (!keysDB[key].device) {
         keysDB[key].device = device;
+        if (days) keysDB[key].expiresAt = Date.now() + daysToMillis(days);
         return res.json({ status: "ok", message: "Device bound", key, device });
       } else {
         return res.json({ status: "error", message: "Key already bound. Cannot update without permission." });
@@ -58,12 +53,12 @@ export default async function handler(req, res) {
 
     // DELETE: Unbind device or delete key
     case 'DELETE':
+      if (!keysDB[key]) return res.json({ status: "invalid", message: "Key does not exist" });
       if (device) {
-        // Only allow unbind if device matches (already enforced by top check)
+        // Device check already enforced above
         keysDB[key].device = null;
         return res.json({ status: "ok", message: "Device unbound", key });
       } else {
-        // Delete key completely
         delete keysDB[key];
         return res.json({ status: "ok", message: "Key deleted", key });
       }
