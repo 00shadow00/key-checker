@@ -2,7 +2,7 @@
 let keysDB = {
   "ABC123": { device: null },
   "venom": { device: "18db7457294f554f" },
-  "abd": {
+  "abdee": {
     device: "18db7457294f554f",
     expiry: "2027-01-01" // YYYY-MM-DD
   }
