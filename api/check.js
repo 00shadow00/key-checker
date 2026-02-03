@@ -17,12 +17,12 @@ export default async function handler(req, res) {
     // ===================== GET =====================
     case 'GET':
 
-      // return all keys
+      // Return all keys
       if (!key) {
         return res.status(200).json(keysDB);
       }
 
-      // key not found
+      // Key not found
       if (!keysDB[key]) {
         return res.json({ status: "invalid" });
       }
@@ -30,15 +30,15 @@ export default async function handler(req, res) {
       const savedDevice = keysDB[key].device;
       const expiry = keysDB[key].expiry;
 
-      // 🔒 SAME device check logic (unchanged)
+      // 🔒 SAME device logic (unchanged)
       if (savedDevice && device && savedDevice !== device) {
         return res.json({ status: "invalid" });
       }
 
-      // ⏰ ADDED: expiry check (SERVER DATE)
+      // ⏰ ADDED ONLY: expiry check (server date, end of day)
       if (expiry) {
         const now = new Date();
-        const expDate = new Date(expiry);
+        const expDate = new Date(expiry + "T23:59:59");
 
         if (now > expDate) {
           return res.json({
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // SAME response
+      // SAME original response
       const deviceStatus = savedDevice ? savedDevice : "Not bound";
       return res.json({
         status: "ok",
