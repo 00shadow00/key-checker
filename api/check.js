@@ -1,95 +1,146 @@
-import { Redis } from "@upstash/redis";
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+// Simulated Database (Temporary in-memory store)
+let keysDB = {
+  "ABC123": { device: null },
+  "venom": { device: "18db7457294f554f" },
+  "abdee": {
+    device: "18db7457294f554f",
+    expiry: "2027-01-01" // YYYY-MM-DD
+  }
+};
 
 export default async function handler(req, res) {
   const { method } = req;
-  const { key, device } = req.query;
+  const { key, device, expiry } = req.query;
 
   switch (method) {
 
     // ===================== GET =====================
-    case 'GET': {
+    case 'GET':
+
+      // Return all keys
       if (!key) {
-        const keys = await redis.keys("*");
-        const all = {};
-        for (const k of keys) {
-          all[k] = await redis.get(k);
-        }
-        return res.status(200).json(all);
+        return res.status(200).json(keysDB);
       }
 
-      const data = await redis.get(key);
+      // Key not found
+      if (!keysDB[key]) {
+        return res.json({ status: "invalid" });
+      }
 
-      if (!data) return res.json({ status: "invalid" });
+      const savedDevice = keysDB[key].device;
+      const savedExpiry = keysDB[key].expiry;
 
-      const { device: savedDevice, expiry } = data;
-
+      // 🔒 SAME device logic (unchanged)
       if (savedDevice && device && savedDevice !== device) {
         return res.json({ status: "invalid" });
       }
 
-      if (expiry) {
+      // ⏰ EXPIRY CHECK (added)
+      if (savedExpiry) {
         const now = new Date();
-        const expDate = new Date(expiry + "T23:59:59");
+        const expDate = new Date(savedExpiry + "T23:59:59");
+
         if (now > expDate) {
-          return res.json({ status: "error", message: "expired" });
+          return res.json({
+            status: "error",
+            message: "expired"
+          });
         }
+      }
+
+      // SAME original response
+      return res.json({
+        status: "ok",
+        key,
+        device: savedDevice ? savedDevice : "Not bound",
+        expiry: savedExpiry || null
+      });
+
+    // ===================== POST =====================
+    case 'POST':
+      if (!key) {
+        return res.json({ status: "error", message: "Key is required" });
+      }
+
+      if (keysDB[key]) {
+        return res.json({ status: "error", message: "Key already exists" });
+      }
+
+      keysDB[key] = {
+        device: device || null,
+        expiry: expiry || null   // 🔥 ADDED
+      };
+
+      return res.json({
+        status: "ok",
+        message: "Key created",
+        key,
+        device: keysDB[key].device,
+        expiry: keysDB[key].expiry
+      });
+
+    // ===================== PUT =====================
+    case 'PUT':
+      if (!key) {
+        return res.json({ status: "error", message: "Key is required" });
+      }
+
+      if (!keysDB[key]) {
+        return res.json({ status: "error", message: "Key does not exist" });
+      }
+
+      // SAME device update
+      if (device !== undefined) {
+        keysDB[key].device = device || null;
+      }
+
+      // 🔥 ADDED expiry update
+      if (expiry !== undefined) {
+        keysDB[key].expiry = expiry || null;
       }
 
       return res.json({
         status: "ok",
+        message: "Key updated",
         key,
-        device: savedDevice || "Not bound"
+        device: keysDB[key].device,
+        expiry: keysDB[key].expiry
       });
-    }
-
-    // ===================== POST =====================
-    case 'POST': {
-      if (!key) return res.json({ status: "error", message: "Key is required" });
-
-      const exists = await redis.get(key);
-      if (exists) return res.json({ status: "error", message: "Key already exists" });
-
-      await redis.set(key, { device: device || null, expiry: null });
-
-      return res.json({ status: "ok", message: "Key created", key, device: device || null });
-    }
-
-    // ===================== PUT =====================
-    case 'PUT': {
-      if (!key) return res.json({ status: "error", message: "Key is required" });
-
-      const data = await redis.get(key);
-      if (!data) return res.json({ status: "error", message: "Key does not exist" });
-
-      data.device = device;
-      await redis.set(key, data);
-
-      return res.json({ status: "ok", message: "Device updated", key, device });
-    }
 
     // ===================== DELETE =====================
-    case 'DELETE': {
-      if (!key) return res.json({ status: "error", message: "Key is required" });
-
-      const data = await redis.get(key);
-      if (!data) return res.json({ status: "error", message: "Key does not exist" });
-
-      if (device) {
-        data.device = null;
-        await redis.set(key, data);
-        return res.json({ status: "ok", message: "Device unbound", key });
+    case 'DELETE':
+      if (!key) {
+        return res.json({ status: "error", message: "Key is required" });
       }
 
-      await redis.del(key);
-      return res.json({ status: "ok", message: "Key deleted", key });
-    }
+      if (!keysDB[key]) {
+        return res.json({ status: "error", message: "Key does not exist" });
+      }
 
+      // Unbind device only
+      if (device) {
+        keysDB[key].device = null;
+        return res.json({
+          status: "ok",
+          message: "Device unbound",
+          key
+        });
+      }
+
+      // Delete key
+      delete keysDB[key];
+      return res.json({
+        status: "ok",
+        message: "Key deleted",
+        key
+      });
+
+    // ===================== DEFAULT =====================
     default:
-      return res.status(405).json({ status: "error", message: "Method Not Allowed" });
+      return res.status(405).json({
+        status: "error",
+        message: "Method Not Allowed"
+      });
   }
 }
+
