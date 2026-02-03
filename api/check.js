@@ -10,7 +10,7 @@ let keysDB = {
   },
   "abd": {
     device: "18db7457294f554f",
-    expiry: "2026-01-01" // YYYY-MM-DD
+    expiry: "2027-01-01" // YYYY-MM-DD
   }
 };
 
