@@ -1,7 +1,8 @@
 // Simulated Database (Temporary in-memory store)
 let keysDB = {
   "ABC123": { device: null },
-  "venom": { device: "18db7457294f554fss" }
+  "venom": { device: "18db7457294f554f" },
+  "aj": {device: "888" }
 };
 
 export default async function handler(req, res) {
