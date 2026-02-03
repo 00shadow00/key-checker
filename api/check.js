@@ -1,3 +1,5 @@
+
+
 // Simulated Database (Temporary in-memory store)
 let keysDB = {
   "ABC123": { device: null, expiresAt: null },
@@ -81,24 +83,12 @@ export default async function handler(req, res) {
         return res.json({ status: "expired" });
       }
 
-      // Update device if provided
-      if (device !== undefined) {
-        keysDB[key].device = device;
-      }
-
-      // Update expiry if provided
-      if (days !== undefined) {
-        keysDB[key].expiresAt = days
-          ? Date.now() + Number(days) * 24 * 60 * 60 * 1000
-          : null;
-      }
-
+      keysDB[key].device = device;
       return res.json({
         status: "ok",
-        message: "Key updated",
+        message: "Device updated",
         key,
-        device: keysDB[key].device,
-        expiresAt: keysDB[key].expiresAt
+        device
       });
 
     // ================= DELETE =================
