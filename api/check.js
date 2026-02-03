@@ -5,26 +5,28 @@ let keysDB = {
 };
 
 export default async function handler(req, res) {
-  const { method } = req;  // HTTP method (GET, POST, PUT, DELETE)
-  const { key, device } = req.query;  // Extract `key` and `device` from query parameters
-  
-  // Handle different HTTP methods
+  const { method } = req;
+  const { key, device } = req.query;
+
   switch (method) {
-    // **GET**: Retrieve the status of a specific key or all keys
+
+    // --- GET: Retrieve key status ---
     case 'GET':
       if (!key) {
-        return res.status(200).json(keysDB);  // Return all keys if no specific key is provided
+        return res.status(200).json(keysDB); // Return all keys
       }
 
       if (!keysDB[key]) {
-        return res.json({ status: "invalid" });  // Key doesn't exist
+        return res.json({ status: "invalid" });
       }
 
-      // Key exists, return its device status
-      const deviceStatus = keysDB[key].device ? keysDB[key].device : "Not bound";
-      return res.json({ status: "ok", key, device: deviceStatus });
+      return res.json({
+        status: "ok",
+        key,
+        device: keysDB[key].device || "Not bound"
+      });
 
-    // **POST**: Create a new key (optionally bind it to a device)
+    // --- POST: Create a new key ---
     case 'POST':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -34,11 +36,10 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key already exists" });
       }
 
-      // Create new key and bind it to a device if provided
       keysDB[key] = { device: device || null };
       return res.json({ status: "ok", message: "Key created", key, device: keysDB[key].device });
 
-    // **PUT**: Update the device of an existing key
+    // --- PUT: Bind a device to an unbound key (cannot update existing binding) ---
     case 'PUT':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -48,11 +49,16 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      // Update the device (bind the key to a new device)
-      keysDB[key].device = device;
-      return res.json({ status: "ok", message: "Device updated", key, device });
+      // Prevent changing device if already bound
+      if (keysDB[key].device) {
+        return res.json({ status: "error", message: "Key is already bound to a device. Cannot update without permission." });
+      }
 
-    // **DELETE**: Delete a key or unbind its device
+      // Bind the key to the device
+      keysDB[key].device = device;
+      return res.json({ status: "ok", message: "Device bound", key, device });
+
+    // --- DELETE: Unbind device or delete key ---
     case 'DELETE':
       if (!key) {
         return res.json({ status: "error", message: "Key is required" });
@@ -62,17 +68,20 @@ export default async function handler(req, res) {
         return res.json({ status: "error", message: "Key does not exist" });
       }
 
-      // If device is provided, unbind it
+      // Unbind device only if the correct device is provided
       if (device) {
+        if (keysDB[key].device !== device) {
+          return res.json({ status: "error", message: "Device does not match the key. Cannot unbind." });
+        }
         keysDB[key].device = null;
         return res.json({ status: "ok", message: "Device unbound", key });
       }
 
-      // Delete the key from the database
+      // Delete key completely (allowed regardless of device binding)
       delete keysDB[key];
       return res.json({ status: "ok", message: "Key deleted", key });
 
-    // Default case for unsupported methods
+    // --- Unsupported methods ---
     default:
       return res.status(405).json({ status: "error", message: "Method Not Allowed" });
   }
