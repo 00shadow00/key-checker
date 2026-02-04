@@ -1,6 +1,8 @@
-const UPSTASH_REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
-const UPSTASH_REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+// ===================== Upstash Redis Config =====================
+const UPSTASH_REDIS_URL = "https://actual-drum-63266.upstash.io";
+const UPSTASH_REDIS_TOKEN = "AfciAAIncDE4MjkxYmFhOTUyMzI0NTk2ODYxNDc3ZmJiNjFkZjVkOXAxNjMyNjY";
 
+// ===================== Redis Helpers =====================
 async function getKey(key) {
   const res = await fetch(`${UPSTASH_REDIS_URL}/get/${key}`, {
     headers: { Authorization: `Bearer ${UPSTASH_REDIS_TOKEN}` },
@@ -27,32 +29,52 @@ async function deleteKey(key) {
   });
 }
 
+// ===================== API Handler =====================
 export default async function handler(req, res) {
   const { method } = req;
   const { key, device, expiry } = req.query;
 
   switch (method) {
+    // ===================== GET =====================
     case "GET":
       if (!key) return res.json({ status: "error", message: "Key is required" });
+
       const saved = await getKey(key);
       if (!saved) return res.json({ status: "invalid" });
 
-      if (saved.device && device && saved.device !== device) return res.json({ status: "invalid" });
+      // Device check
+      if (saved.device && device && saved.device !== device) {
+        return res.json({ status: "invalid" });
+      }
 
-      if (saved.expiry && new Date() > new Date(saved.expiry + "T23:59:59"))
-        return res.json({ status: "error", message: "expired" });
+      // Expiry check
+      if (saved.expiry) {
+        const now = new Date();
+        const expDate = new Date(saved.expiry + "T23:59:59");
+        if (now > expDate) return res.json({ status: "error", message: "expired" });
+      }
 
-      return res.json({ status: "ok", key, device: saved.device || "Not bound", expiry: saved.expiry || null });
+      return res.json({
+        status: "ok",
+        key,
+        device: saved.device || "Not bound",
+        expiry: saved.expiry || null,
+      });
 
+    // ===================== POST =====================
     case "POST":
       if (!key) return res.json({ status: "error", message: "Key is required" });
       if (await getKey(key)) return res.json({ status: "error", message: "Key already exists" });
 
-      await setKey(key, { device: device || null, expiry: expiry || null });
-      return res.json({ status: "ok", message: "Key created", key, device: device || null, expiry: expiry || null });
+      const newKey = { device: device || null, expiry: expiry || null };
+      await setKey(key, newKey);
 
+      return res.json({ status: "ok", message: "Key created", key, ...newKey });
+
+    // ===================== PUT =====================
     case "PUT":
       if (!key) return res.json({ status: "error", message: "Key is required" });
+
       const keyData = await getKey(key);
       if (!keyData) return res.json({ status: "error", message: "Key does not exist" });
 
@@ -60,19 +82,24 @@ export default async function handler(req, res) {
       if (expiry !== undefined) keyData.expiry = expiry || null;
 
       await setKey(key, keyData);
+
       return res.json({ status: "ok", message: "Key updated", key, ...keyData });
 
+    // ===================== DELETE =====================
     case "DELETE":
       if (!key) return res.json({ status: "error", message: "Key is required" });
+
       const k = await getKey(key);
       if (!k) return res.json({ status: "error", message: "Key does not exist" });
 
+      // Unbind device only
       if (device) {
         k.device = null;
         await setKey(key, k);
         return res.json({ status: "ok", message: "Device unbound", key });
       }
 
+      // Delete key
       await deleteKey(key);
       return res.json({ status: "ok", message: "Key deleted", key });
 
