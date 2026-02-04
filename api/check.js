@@ -1,160 +1,112 @@
-import { Redis } from "@upstash/redis";
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-// Initialize Redis client
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN
-});
+async function redis(cmd, ...args) {
+  const res = await fetch(`${REDIS_URL}/${cmd}/${args.join("/")}`, {
+    headers: {
+      Authorization: `Bearer ${REDIS_TOKEN}`,
+    },
+  });
+  return res.json();
+}
 
 export default async function handler(req, res) {
-  const { method } = req;
-  const { key, device, expiry } = req.query;
-
-  switch (method) {
+  try {
+    const { method } = req;
+    const { key, device, expiry } = req.query;
 
     // ===================== GET =====================
-    case 'GET':
-      // Return all keys (you can consider limiting this for performance in production)
+    if (method === "GET") {
       if (!key) {
-        // Redis keys pattern (can adjust to your needs)
-        const allKeys = await redis.keys('*');
-        const allData = {};
-
-        for (let k of allKeys) {
-          const v = await redis.get(k);
-          allData[k] = JSON.parse(v);
-        }
-
-        return res.status(200).json(allData);
+        return res.json({ error: "Key required" });
       }
 
-      // Key not found in Redis
-      const value = await redis.get(key);
-      if (!value) return res.json({ status: "invalid" });
+      const data = await redis("get", key);
+      if (!data.result) return res.json({ status: "invalid" });
 
-      const saved = JSON.parse(value);
+      const saved = JSON.parse(data.result);
 
-      // 🔒 SAME device logic (unchanged)
       if (saved.device && device && saved.device !== device) {
         return res.json({ status: "invalid" });
       }
 
-      // ⏰ EXPIRY CHECK
       if (saved.expiry) {
         const now = new Date();
-        const expDate = new Date(saved.expiry + "T23:59:59");
-
-        if (now > expDate) {
-          return res.json({
-            status: "error",
-            message: "expired"
-          });
+        const exp = new Date(saved.expiry + "T23:59:59");
+        if (now > exp) {
+          return res.json({ status: "error", message: "expired" });
         }
       }
 
-      // Return saved data
       return res.json({
         status: "ok",
         key,
         device: saved.device || "Not bound",
-        expiry: saved.expiry || null
+        expiry: saved.expiry || null,
       });
+    }
 
     // ===================== POST =====================
-    case 'POST':
-      if (!key) {
-        return res.json({ status: "error", message: "Key is required" });
+    if (method === "POST") {
+      if (!key) return res.json({ error: "Key required" });
+
+      const exists = await redis("get", key);
+      if (exists.result) {
+        return res.json({ error: "Key already exists" });
       }
 
-      // Check if key already exists
-      const existing = await redis.get(key);
-      if (existing) {
-        return res.json({ status: "error", message: "Key already exists" });
-      }
-
-      // Save new key
-      const newData = {
-        device: device || null,
-        expiry: expiry || null
-      };
-
-      await redis.set(key, JSON.stringify(newData));
-
-      return res.json({
-        status: "ok",
-        message: "Key created",
+      await redis(
+        "set",
         key,
-        device: newData.device,
-        expiry: newData.expiry
-      });
+        JSON.stringify({
+          device: device || null,
+          expiry: expiry || null,
+        })
+      );
+
+      return res.json({ status: "ok", message: "Key created" });
+    }
 
     // ===================== PUT =====================
-    case 'PUT':
-      if (!key) {
-        return res.json({ status: "error", message: "Key is required" });
-      }
+    if (method === "PUT") {
+      if (!key) return res.json({ error: "Key required" });
 
-      const current = await redis.get(key);
-      if (!current) {
-        return res.json({ status: "error", message: "Key does not exist" });
-      }
+      const data = await redis("get", key);
+      if (!data.result) return res.json({ error: "Key not found" });
 
-      const updatedData = JSON.parse(current);
+      const obj = JSON.parse(data.result);
 
-      if (device !== undefined) {
-        updatedData.device = device || null;
-      }
+      if (device !== undefined) obj.device = device || null;
+      if (expiry !== undefined) obj.expiry = expiry || null;
 
-      if (expiry !== undefined) {
-        updatedData.expiry = expiry || null;
-      }
+      await redis("set", key, JSON.stringify(obj));
 
-      await redis.set(key, JSON.stringify(updatedData));
-
-      return res.json({
-        status: "ok",
-        message: "Key updated",
-        key,
-        device: updatedData.device,
-        expiry: updatedData.expiry
-      });
+      return res.json({ status: "ok", message: "Key updated" });
+    }
 
     // ===================== DELETE =====================
-    case 'DELETE':
-      if (!key) {
-        return res.json({ status: "error", message: "Key is required" });
-      }
+    if (method === "DELETE") {
+      if (!key) return res.json({ error: "Key required" });
 
-      const dataToDelete = await redis.get(key);
-      if (!dataToDelete) {
-        return res.json({ status: "error", message: "Key does not exist" });
-      }
-
-      // Unbind device
       if (device) {
-        const data = JSON.parse(dataToDelete);
-        data.device = null;
-        await redis.set(key, JSON.stringify(data));
-        return res.json({
-          status: "ok",
-          message: "Device unbound",
-          key
-        });
+        const data = await redis("get", key);
+        if (!data.result) return res.json({ error: "Key not found" });
+
+        const obj = JSON.parse(data.result);
+        obj.device = null;
+
+        await redis("set", key, JSON.stringify(obj));
+        return res.json({ status: "ok", message: "Device unbound" });
       }
 
-      // Delete the key
-      await redis.del(key);
-      return res.json({
-        status: "ok",
-        message: "Key deleted",
-        key
-      });
+      await redis("del", key);
+      return res.json({ status: "ok", message: "Key deleted" });
+    }
 
-    // ===================== DEFAULT =====================
-    default:
-      return res.status(405).json({
-        status: "error",
-        message: "Method Not Allowed"
-      });
+    return res.status(405).json({ error: "Method not allowed" });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Server crashed" });
   }
 }
