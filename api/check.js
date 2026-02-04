@@ -58,8 +58,7 @@ export default async function handler(req, res) {
     // ===================== GET =====================
     case "GET":
       if (!key) {
-        // If no key query, return all keys (fetching each key)
-        // ⚠️ Might be slow for many keys
+        // Return all keys (might be slow for many keys)
         const keysRes = await fetch(`${UPSTASH_REDIS_URL}/keys/*`, {
           headers: { Authorization: `Bearer ${UPSTASH_REDIS_TOKEN}` },
         });
@@ -71,10 +70,20 @@ export default async function handler(req, res) {
         return res.status(200).json(allKeys);
       }
 
-      const saved = await getKey(key);
-      if (!saved) return res.json({ status: "invalid" });
+      // Try to fetch key
+      let saved = await getKey(key);
 
-      // Device validator: must match or return invalid
+      // Auto-initialize from defaultKeys if missing
+      if (!saved) {
+        if (defaultKeys[key]) {
+          await setKey(key, defaultKeys[key]);
+          saved = defaultKeys[key];
+        } else {
+          return res.json({ status: "invalid" });
+        }
+      }
+
+      // Device validator: only invalid if bound and query doesn't match
       if (saved.device && device && saved.device !== device) {
         return res.json({ status: "invalid" });
       }
