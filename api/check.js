@@ -29,20 +29,52 @@ async function deleteKey(key) {
   });
 }
 
+// ===================== Preload Default Keys =====================
+const defaultKeys = {
+  "ABC123": { device: null },
+  "venom": { device: "18db7457294f554f" },
+  "abdee": { device: "18db7457294f554f", expiry: "2027-01-01" }
+};
+
+async function initDefaultKeys() {
+  for (const k of Object.keys(defaultKeys)) {
+    const exists = await getKey(k);
+    if (!exists) {
+      await setKey(k, defaultKeys[k]);
+    }
+  }
+}
+
+// Initialize once
+initDefaultKeys().catch(console.error);
+
 // ===================== API Handler =====================
 export default async function handler(req, res) {
   const { method } = req;
   const { key, device, expiry } = req.query;
 
   switch (method) {
+
     // ===================== GET =====================
     case "GET":
-      if (!key) return res.json({ status: "error", message: "Key is required" });
+      if (!key) {
+        // If no key query, return all keys (fetching each key)
+        // ⚠️ Might be slow for many keys
+        const keysRes = await fetch(`${UPSTASH_REDIS_URL}/keys/*`, {
+          headers: { Authorization: `Bearer ${UPSTASH_REDIS_TOKEN}` },
+        });
+        const data = await keysRes.json();
+        const allKeys = {};
+        for (let k of data.result) {
+          allKeys[k] = await getKey(k);
+        }
+        return res.status(200).json(allKeys);
+      }
 
       const saved = await getKey(key);
       if (!saved) return res.json({ status: "invalid" });
 
-      // Device check
+      // Device validator: must match or return invalid
       if (saved.device && device && saved.device !== device) {
         return res.json({ status: "invalid" });
       }
@@ -89,13 +121,13 @@ export default async function handler(req, res) {
     case "DELETE":
       if (!key) return res.json({ status: "error", message: "Key is required" });
 
-      const k = await getKey(key);
-      if (!k) return res.json({ status: "error", message: "Key does not exist" });
+      const existing = await getKey(key);
+      if (!existing) return res.json({ status: "error", message: "Key does not exist" });
 
       // Unbind device only
       if (device) {
-        k.device = null;
-        await setKey(key, k);
+        existing.device = null;
+        await setKey(key, existing);
         return res.json({ status: "ok", message: "Device unbound", key });
       }
 
