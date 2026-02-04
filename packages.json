@@ -1,8 +1,0 @@
-{
-  "name": "keys-api",
-  "version": "1.0.0",
-  "main": "index.js",
-  "dependencies": {
-    "@upstash/redis": "^1.23.0"
-  }
-}
