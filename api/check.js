@@ -53,12 +53,18 @@ export default async function handler(req, res) {
   const { method } = req;
   const { key, device, expiry } = req.query;
 
+  // ===================== COMMON HEADERS =====================
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+
   switch (method) {
 
     // ===================== GET =====================
     case "GET":
       if (!key) {
-        // Return all keys (might be slow for many keys)
+        // Return all keys (might be slow if many)
         const keysRes = await fetch(`${UPSTASH_REDIS_URL}/keys/*`, {
           headers: { Authorization: `Bearer ${UPSTASH_REDIS_TOKEN}` },
         });
@@ -70,10 +76,9 @@ export default async function handler(req, res) {
         return res.status(200).json(allKeys);
       }
 
-      // Try to fetch key
       let saved = await getKey(key);
 
-      // Auto-initialize from defaultKeys if missing
+      // Auto-init default if missing
       if (!saved) {
         if (defaultKeys[key]) {
           await setKey(key, defaultKeys[key]);
@@ -83,12 +88,12 @@ export default async function handler(req, res) {
         }
       }
 
-      // Device validator: only invalid if bound and query doesn't match
+      // Device validator
       if (saved.device && device && saved.device !== device) {
         return res.json({ status: "invalid" });
       }
 
-      // Expiry check
+      // Expiry validator
       if (saved.expiry) {
         const now = new Date();
         const expDate = new Date(saved.expiry + "T23:59:59");
