@@ -1,0 +1,14 @@
+{
+  "keys": [
+    {
+      "key": "ABC123",
+      "device": "1234xdx",
+      "status": "ok"
+    },
+    {
+      "key": "XYZ999",
+      "device": "phone567",
+      "status": "invalid"
+    }
+  ]
+}
